@@ -18,8 +18,22 @@
 */
 #define SERIAL_LINE_ENABLE_DLAB 0x80
 
+#define FB_BLACK 0
+#define FB_BLUE 1
 #define FB_GREEN 2
+#define FB_CYAN 3
+#define FB_RED 4
+#define FB_MAGENTA 5
+#define FB_BROWN 6
+#define FB_LIGHT_GREY 7
 #define FB_DARK_GREY 8
+#define FB_LIGHT_GREEN 10
+#define FB_LIGHT_CYAN 11
+#define FB_LIGH_RED 12
+#define FB_LIGHT_MAGENTA 13
+#define FB_LIGHT_BROWN 14
+#define FB_WHITE 15
+
 static char * fb = (char *)0x000B8000;
 
 int serial_is_transmit_fifo_empty(unsigned int com)
@@ -52,9 +66,10 @@ void fb_write_cell(unsigned int i, char c, unsigned char fg, unsigned char bg)
 
 
 int write(char *buf, unsigned int len){
-    int i=0;
+    unsigned int i=0;
     while (i<len){
-        fb_write_cell(16 * i, *buf, FB_GREEN, FB_DARK_GREY);
+        fb_write_cell(16 * i, *buf, FB_WHITE, FB_BLACK);
         ++i;
     }
+    return 0;
 }

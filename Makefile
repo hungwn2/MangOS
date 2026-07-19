@@ -1,4 +1,4 @@
-OBJECTS = loader.o kmain.o
+OBJECTS = loader.o kmain.o io.o io_asm.o
 CC = gcc
 CFLAGS = -m32 -nostdlib -nostdinc -fno-builtin -fno-stack-protector \
 -nostartfiles -nodefaultlibs -Wall -Wextra -Werror -c
@@ -6,6 +6,7 @@ LDFLAGS = -T link.ld -melf_i386
 AS = nasm
 ASFLAGS = -f elf
 all: kernel.elf
+
 kernel.elf: $(OBJECTS)
 	ld $(LDFLAGS) $(OBJECTS) -o kernel.elf
 os.iso: kernel.elf
@@ -23,6 +24,8 @@ os.iso: kernel.elf
 		
 run: os.iso
 	bochs -f bochsrc.txt -q
+io_asm.o: io.s
+	$(AS) $(ASFLAGS) $< -o $@
 %.o: %.c
 	$(CC) $(CFLAGS) $< -o $@
 %.o: %.s
