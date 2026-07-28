@@ -68,8 +68,9 @@ void fb_write_cell(unsigned int i, char c, unsigned char fg, unsigned char bg)
 int write(char *buf, unsigned int len){
     unsigned int i=0;
     while (i<len){
-        fb_write_cell(16 * i, *buf, FB_WHITE, FB_BLACK);
+        fb_write_cell(16 * i, buf[i], FB_WHITE, FB_BLACK);
         ++i;
+
     }
     return 0;
 }
