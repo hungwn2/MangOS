@@ -1,1 +1,32 @@
-A simple 32-bit RISC-V, featuring virtual memory, dynamic mmeory allocation, a standard c library, systems calls, and user-mode. It doesn't really have a ton going for it and I ended up scrapping it in favour of something much bigger I am working on 
+Todo:
+General
+ GDT
+ IDT
+ Userspace 
+ SMP
+ Spinlocks
+ Mutexes + Semaphores
+Memory
+ Physical memory allocator (bitmap)
+ Kernelspace heap
+ Paging
+
+File Systems
+ TempFS
+ VFS
+ Initial ramdisk (USTAR archive)
+ ext2
+ FAT32
+Drivers
+ Serial
+ Framebuffer
+ USB
+ Networking
+ More to come...
+
+Userspace components
+ libc
+ A userspace shell
+ A playable version of DOOM
+ Basic GUI/window server + components
+ Terminal emulator
