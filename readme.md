@@ -1,1 +1,1 @@
-This will play doom and allow for basic user I/O
+A simple 32-bit RISC-V, featuring virtual memory, dynamic mmeory allocation, a standard c library, systems calls, and user-mode. It doesn't really have a ton going for it and I ended up scrapping it in favour of something much bigger I am working on 
