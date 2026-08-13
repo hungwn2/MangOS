@@ -1,3 +1,5 @@
+A functional UNIX-compliant OS for the MangoPi MQ-Pro SBC. Inspired by MIT's xv6 
+
 Todo:
 General
  GDT
