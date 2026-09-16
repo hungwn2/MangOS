@@ -209,7 +209,7 @@ devintr()
       plic_complete(irq);
 
     return 1;
-  } else if (scause == 0x8000000000000005L) {
+  } else if (scause == 0x8000000000000001L) {
     // timer interrupt.
     clockintr();
     w_sip(r_sip() & ~2);
