@@ -4,42 +4,56 @@
 #include "riscv.h"
 #include "defs.h"
 
-volatile static int started = 0;
+void d1_uart_puts(const char *);
 
-// start() jumps here in supervisor mode on all CPUs.
-void
-main()
+static void
+mark(const char *s)
 {
-  if (cpuid() == 0) {
-    consoleinit();
-    printkinit();
-    printk("\n");
-    printk("xv6 kernel is booting\n");
-    printk("\n");
-    kinit();            // physical page allocator
-    kvminit();          // create kernel page table
-    kvminithart();      // turn on paging
-    procinit();         // process table
-    trapinit();         // trap vectors
-    trapinithart();     // install kernel trap vector
-    plicinit();         // set up interrupt controller
-    plicinithart();     // ask PLIC for device interrupts
-    binit();            // buffer cache
-    iinit();            // inode table
-    fileinit();         // file table
-    virtio_disk_init(); // emulated hard disk
-    userinit();         // first user process
+  d1_uart_puts(s);
+  d1_uart_puts("\r\n");
+}
 
-    __atomic_store_n(&started, 1, __ATOMIC_RELEASE);
-  } else {
-    while (__atomic_load_n(&started, __ATOMIC_ACQUIRE) == 0)
-      ;
+void
+main(void)
+{
+  mark("main entered");
 
-    printk("hart %d starting\n", cpuid());
-    kvminithart();  // turn on paging
-    trapinithart(); // install kernel trap vector
-    plicinithart(); // ask PLIC for device interrupts
+  mark("kinit...");
+  kinit();
+
+  mark("kvminit...");
+  kvminit();
+
+  mark("kvminithart...");
+  kvminithart();
+
+  mark("paging enabled");
+
+  mark("procinit...");
+  procinit();
+
+  mark("trapinit...");
+  trapinit();
+
+  mark("trapinithart...");
+  trapinithart();
+
+  mark("basic kernel initialization OK");
+
+  intr_on();
+
+  mark("interrupts enabled");
+
+  uint last = ticks;
+
+  for (;;) {
+    if (ticks != last) {
+      last = ticks;
+
+      if ((ticks % 10) == 0)
+        mark("10 ticks passed");
+    }
+
+    asm volatile("wfi");
   }
-
-  scheduler();
 }

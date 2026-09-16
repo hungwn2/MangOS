@@ -4,63 +4,87 @@
 #include "riscv.h"
 #include "defs.h"
 
-void main();
-void timerinit();
+void main(void);
+void timerinit(void);
+void d1_uart_hw_init(void);
 
-// entry.S needs one stack per CPU.
+extern void timervec(void);
+
+// one stack per CPU
 __attribute__((aligned(16))) char stack0[4096 * NCPU];
 
-// entry.S jumps here in machine mode on stack0.
+// scratch area used by timervec
+uint64 timer_scratch[NCPU][5];
+
 void
-start()
+start(void)
 {
-  // set M Previous Privilege mode to Supervisor, for mret.
+  d1_uart_hw_init();
+
+  // mret should enter supervisor mode.
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;
   x |= MSTATUS_MPP_S;
   w_mstatus(x);
 
-  // set M Exception Program Counter to main, for mret.
-  // requires gcc -mcmodel=medany
+  // enter main() after mret.
   w_mepc((uint64)main);
 
-  // disable paging for now.
+  // paging disabled during early bring-up.
   w_satp(0);
 
-  // delegate all interrupts and exceptions to supervisor mode.
+  // delegate normal traps to S-mode.
   w_medeleg(0xffff);
   w_mideleg(0xffff);
-  w_sie(r_sie() | SIE_SEIE | SIE_STIE);
 
-  // configure Physical Memory Protection to give supervisor mode
-  // access to all of physical memory.
-  w_pmpaddr0(0x3fffffffffffffull);
-  w_pmpcfg0(0xf);
+  // allow supervisor software interrupts.
+  w_sie(r_sie() | SIE_SSIE);
 
-  // enable hardware updates of page table A and D bits
-  w_menvcfg(r_menvcfg() | MENVCFG_ADUE);
+  // give S-mode access to physical memory.
+  w_pmpaddr0(0xffffffffULL);
+  w_pmpcfg0(0x0f);
 
-  // ask for clock interrupts.
   timerinit();
 
-  // keep each CPU's hartid in its tp register, for cpuid().
-  int id = r_mhartid();
-  w_tp(id);
+  w_tp(0);
 
-  // switch to supervisor mode and jump to main().
   asm volatile("mret");
 }
 
-// ask each hart to generate timer interrupts.
 void
-timerinit()
+timerinit(void)
 {
-  // enable the sstc extension (i.e. stimecmp).
-  w_menvcfg(r_menvcfg() | MENVCFG_STCE);
+  int id = 0;
 
-  // allow supervisor to use stimecmp and time.
+  // D1 timer frequency is much higher than we need.
+  // Start with 1,000,000 ticks and adjust later.
+  uint64 interval = 1000000;
+
+  uint64 next = r_time() + interval;
+
+  volatile uint32 *cmp = (volatile uint32 *)CLINT_MTIMECMP(id);
+
+  // program 64-bit compare using two 32-bit MMIO writes
+  cmp[1] = 0xffffffff;
+  cmp[0] = (uint32)next;
+  cmp[1] = (uint32)(next >> 32);
+
+  uint64 *scratch = &timer_scratch[id][0];
+
+  scratch[3] = CLINT_MTIMECMP(id);
+  scratch[4] = interval;
+
+  w_mscratch((uint64)scratch);
+
+  // machine-mode timer handler
+  w_mtvec((uint64)timervec);
+
+  // enable machine interrupts
+  w_mstatus(r_mstatus() | MSTATUS_MIE);
+
+  // enable machine timer interrupt
+  w_mie(r_mie() | MIE_MTIE);
+
+  // permit S-mode to read time
   w_mcounteren(r_mcounteren() | 2);
-
-  // ask for the very first timer interrupt.
-  w_stimecmp(r_time() + 1000000);
 }

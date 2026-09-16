@@ -62,3 +62,44 @@ kernelvec:
 
         # return to whatever we were doing in the kernel.
         sret
+#
+# Machine-mode timer interrupt.
+#
+.globl timervec
+.align 4
+timervec:
+        # mscratch points to timer_scratch.
+        csrrw a0, mscratch, a0
+
+        sd a1, 0(a0)
+        sd a2, 8(a0)
+        sd a3, 16(a0)
+
+        # scratch[3] = mtimecmp address
+        # scratch[4] = timer interval
+        ld a1, 24(a0)
+        ld a2, 32(a0)
+
+        # calculate next deadline
+        csrr a3, time
+        add a3, a3, a2
+
+        # safe 64-bit mtimecmp update
+        li t0, -1
+        sw t0, 4(a1)
+
+        sw a3, 0(a1)
+        srli a3, a3, 32
+        sw a3, 4(a1)
+
+        # raise supervisor software interrupt
+        li a1, 2
+        csrw sip, a1
+
+        ld a3, 16(a0)
+        ld a2, 8(a0)
+        ld a1, 0(a0)
+
+        csrrw a0, mscratch, a0
+
+        mret

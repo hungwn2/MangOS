@@ -4,10 +4,10 @@ ENTRY( _entry )
 SECTIONS
 {
   /*
-   * ensure that entry.S / _entry is at 0x80000000,
-   * where qemu's -kernel jumps.
+   * MangoPi MQ Pro / Allwinner D1:
+   * xfel loads kernel.bin at 0x40000000 and jumps there.
    */
-  . = 0x80000000;
+  . = 0x40000000;
 
   .text : {
     kernel/entry.o(_entry)
@@ -33,13 +33,17 @@ SECTIONS
     . = ALIGN(16);
     *(.data .data.*)
   }
+  PROVIDE(bss_start = .);
 
   .bss : {
     . = ALIGN(16);
-    *(.sbss .sbss.*) /* do not need to distinguish this from .bss */
+    *(.sbss .sbss.*)
     . = ALIGN(16);
     *(.bss .bss.*)
   }
 
+  PROVIDE(bss_end = .);
+
+  PROVIDE(end = .);
   PROVIDE(end = .);
 }

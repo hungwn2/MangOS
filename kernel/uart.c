@@ -14,8 +14,7 @@
 // the UART control registers are memory-mapped
 // at address UART0. this macro returns the
 // address of one of the registers.
-#define Reg(reg) ((volatile unsigned char *)(UART0 + (reg)))
-
+#define Reg(reg)         ((volatile uint32 *)(UART0 + 4 * (reg)))
 #define ReadReg(reg)     (*(Reg(reg)))
 #define WriteReg(reg, v) (*(Reg(reg)) = (v))
 
@@ -44,31 +43,14 @@ static int tx_chan; // &tx_chan is the "wait channel"
 
 extern volatile int panicking; // from printk.c
 extern volatile int panicked;  // from printk.c
-
 void
 uartinit(void)
 {
-  // disable interrupts.
+  // Hardware configuration was already performed
+  // in start() by d1_uart_hw_init().
+
+  // No UART interrupts yet.
   WriteReg(IER, 0x00);
-
-  // special mode to set baud rate.
-  WriteReg(LCR, LCR_BAUD_LATCH);
-
-  // LSB for baud rate of 38.4K.
-  WriteReg(0, 0x03);
-
-  // MSB for baud rate of 38.4K.
-  WriteReg(1, 0x00);
-
-  // leave set-baud mode,
-  // and set word length to 8 bits, no parity.
-  WriteReg(LCR, LCR_EIGHT_BITS);
-
-  // reset and enable FIFOs.
-  WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
-
-  // enable transmit and receive interrupts.
-  WriteReg(IER, IER_TX_ENABLE | IER_RX_ENABLE);
 
   initsleeplock(&tx_lock, "uart");
 }
@@ -81,15 +63,11 @@ uartwrite(char buf[], int n)
 {
   acquiresleep(&tx_lock);
 
-  int i = 0;
-  while (i < n) {
-    sleep_prepare(&tx_chan);
-    if (ReadReg(LSR) & LSR_TX_IDLE) {
-      WriteReg(THR, buf[i]);
-      i += 1;
-    } else {
-      sleep();
-    }
+  for (int i = 0; i < n; i++) {
+    while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
+      ;
+
+    WriteReg(THR, buf[i]);
   }
 
   releasesleep(&tx_lock);
@@ -102,21 +80,14 @@ uartwrite(char buf[], int n)
 void
 uartputc_sync(int c)
 {
-  if (panicking == 0)
-    push_off();
+  push_off();
 
-  if (panicked) {
-    for (;;)
-      ;
-  }
-
-  // wait for UART to set Transmit Holding Empty in LSR.
   while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
     ;
+
   WriteReg(THR, c);
 
-  if (panicking == 0)
-    pop_off();
+  pop_off();
 }
 
 // try to read one input character from the UART.

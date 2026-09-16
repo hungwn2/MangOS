@@ -7,6 +7,7 @@ OBJS = \
   $K/console.o \
   $K/printk.o \
   $K/uart.o \
+  $K/d1_uart.o \
   $K/kalloc.o \
   $K/spinlock.o \
   $K/string.o \
@@ -94,6 +95,7 @@ $K/kernel: $(OBJS) $K/kernel.ld
 	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+	$(OBJCOPY) -S -O binary $K/kernel $K/kernel.bin
 
 $K/%.o: $K/%.S
 	$(CC) -march=rv64gc -g $(DETFLAGS) -c -o $@ $<
@@ -159,7 +161,7 @@ fs.img: mkfs/mkfs README $(UPROGS)
 clean: 
 	rm -f *.tex *.dvi *.idx *.aux *.log *.ind *.ilg \
 	*/*.o */*.d */*.asm */*.sym \
-	$K/kernel fs.img \
+	$K/kernel $K/kernel.bin fs.img \
 	mkfs/mkfs .gdbinit \
         $U/usys.S \
 	$(UPROGS)
