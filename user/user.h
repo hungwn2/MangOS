@@ -1,4 +1,5 @@
 #define SBRK_ERROR ((char *)-1)
+#include "kernel/spinlock.h"
 
 struct stat;
 
@@ -48,3 +49,11 @@ void printf(const char *, ...) __attribute__((format(printf, 1, 2)));
 // umalloc.c
 void *malloc(uint);
 void free(void *);
+
+struct semaphore {
+  struct spinlock lock;
+  int count;
+};
+void sem_init(struct semaphore *s, int count);
+void sem_wait(struct semaphore *s);
+void sem_post(struct semaphore *s);
