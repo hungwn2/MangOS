@@ -17,6 +17,8 @@
 // end -- start of kernel page allocation area
 // PHYSTOP -- end RAM used by the kernel
 
+// GPIO base
+#define GPIO_BASE 0x02000000L
 // qemu puts UART registers here in physical memory.
 #define UART0     0x02500000L
 #define UART0_IRQ 18
