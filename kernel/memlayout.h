@@ -18,7 +18,11 @@
 // PHYSTOP -- end RAM used by the kernel
 
 // GPIO base
-#define GPIO_BASE 0x02000000L
+#define D1_GPIO 0x02000000UL
+// CCU base
+#define D1_CCU 0x02001000UL
+// SMHC base
+#define D1_SMHC 0x04020000UL
 // qemu puts UART registers here in physical memory.
 #define UART0     0x02500000L
 #define UART0_IRQ 18

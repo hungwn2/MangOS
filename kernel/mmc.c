@@ -3,84 +3,18 @@
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
-#include "spinlock.h"
-#include "sleeplock.h"
-#include "proc.h"
 #include "defs.h"
-
-#define CCU_BASE   0x02001000UL
-#define GPIO_BASE  0x02000000UL
-#define SMHC0_BASE 0x04020000UL
-
-// CCU
-#define SMHC0_CLK_REG 0x0830
-#define SMHC_BGR_REG  0x084C
-
-#define SMHC0_RST    16
-#define SMHC0_GATING 0
-
-// GPIO Port F
-#define PF_CFG0  0xB4
-#define PF_DRV0  0xC8
-#define PF_PULL0 0xD0
-
-//SMHC
-#define SMHC_CTRL    0x000
-#define SMHC_CLKDIV  0x004
-#define SMHC_TMOUT   0x008
-#define SMHC_CTYPE   0x00C
-#define SMHC_BLKSIZ  0x010
-#define SMHC_BYTCNT  0x014
-#define SMHC_CMD     0x018
-#define SMHC_CMDARG  0x01C
-#define SMHC_RESP0   0x020
-#define SMHC_INTMASK 0x030
-#define SMHC_RINTSTS 0x038
-#define SMHC_STATUS  0x03C
-#define SMHC_FIFOTH  0x040
-
-#define SMHC_DMAC 0x080
-#define SMHC_DLBA 0x084
-#define SMHC_IDST 0x088
-#define SMHC_IDIE 0x08C
-#define SMHC_FIFO 0x200
-
-#define Reg(offset)           ((volatile uint32 *)(SMHC0_BASE + (offset)))
-#define ReadReg(offset)       (*Reg(offset))
-#define WriteReg(offset, val) (*Reg(offset) = (val))
-
-#define CCUReg(offset)        ((volatile uint32 *)(CCU_BASE + (offset)))
-#define ReadCCU(offset)       (*CCUReg(offset))
-#define WriteCCU(offset, val) (*CCUReg(offset) = (val))
-
-#define GPIOReg(offset)        ((volatile uint32 *)(GPIO_BASE + (offset)))
-#define ReadGPIO(offset)       (*GPIOReg(offset))
-#define WriteGPIO(offset, val) (*GPIOReg(offset) = (val))
-
-/* Command bits */
-#define CMD_START (1U << 31)
-#define CMD_UPCLK (1U << 21)
-#define CMD_INIT  (1U << 15)
-#define CMD_WAIT  (1U << 13)
-#define CMD_WRITE (1U << 10)
-#define CMD_DATA  (1U << 9)
-#define CMD_CRC   (1U << 8)
-#define CMD_LONG  (1U << 7)
-#define CMD_RESP  (1U << 6)
-
-/* Interrupt/status bits */
-#define CMD_DONE    (1U << 2)
-#define DATA_OVER   (1U << 3)
-#define FIFO_EMPTY  (1U << 2)
-#define FIFO_FULL   (1U << 3)
-#define CARD_BUSY   (1U << 9)
-#define SMHC_ERRORS 0xBFC2U
+#include "mmc.h"
 
 #define TIMEOUT_LOOPS 10000000
 
+// Additional controller bits.
+#define SMHC_AHB_ACCESS  (1U << 31)
+#define SMHC_FIFO_RESET  (1U << 1)
+#define SMHC_ERRORS_MASK 0xBBC2U
+
 static uint32 rca;
 static int initialized;
-static struct sleeplock mmclock;
 
 static int
 smhc_wait(uint32 mask)
@@ -88,8 +22,8 @@ smhc_wait(uint32 mask)
   for (int i = 0; i < TIMEOUT_LOOPS; i++) {
     uint32 status = ReadReg(SMHC_RINTSTS);
 
-    if (status & SMHC_ERRORS) {
-      printf("smhc error: %x\n", status);
+    if (status & SMHC_ERRORS_MASK) {
+      printk("smhc error: %x\n", status);
       return -1;
     }
 
@@ -97,7 +31,7 @@ smhc_wait(uint32 mask)
       return 0;
   }
 
-  printf("smhc timeout: %x\n", ReadReg(SMHC_RINTSTS));
+  printk("smhc timeout: %x\n", ReadReg(SMHC_RINTSTS));
   return -1;
 }
 
@@ -108,8 +42,10 @@ smhc_send_cmd(uint32 cmd, uint32 arg, uint32 *resp)
   WriteReg(SMHC_CMDARG, arg);
   WriteReg(SMHC_CMD, CMD_START | cmd);
 
-  if (smhc_wait(CMD_DONE) < 0)
+  if (smhc_wait(CMD_DONE) < 0) {
+    printk("SMHC CMD%d failed: status=%x\n", cmd & 0x3F, ReadReg(SMHC_RINTSTS));
     return -1;
+  }
 
   if (resp)
     *resp = ReadReg(SMHC_RESP0);
@@ -131,8 +67,12 @@ smhc0_bus_enable(void)
 static void
 smhc0_clock_enable(void)
 {
-  // HOSC 24 MHz, M=1, N=1
-  WriteCCU(SMHC0_CLK_REG, 1U << 31);
+  // HOSC = 24 MHz
+  // M = 15, P = 1, fixed post-divider = 2
+  // SMHC module clock = 24 MHz / 15 / 2 = 800 kHz
+  // Internal card divider = 2 -> approximately 400 kHz
+
+  WriteCCU(SMHC0_CLK_REG, (1U << 31) | 14U);
 }
 
 static int
@@ -140,10 +80,12 @@ smhc_update_clock(void)
 {
   WriteReg(SMHC_CMD, CMD_START | CMD_UPCLK | CMD_WAIT);
 
-  for (int i = 0; i < TIMEOUT_LOOPS; i++)
+  for (int i = 0; i < TIMEOUT_LOOPS; i++) {
     if (!(ReadReg(SMHC_CMD) & CMD_START))
       return 0;
+  }
 
+  printk("SMHC clock update timeout\n");
   return -1;
 }
 
@@ -162,12 +104,12 @@ smhc_gpio_init(void)
 
   WriteGPIO(PF_CFG0, v);
 
-  // Configure pull-ups for data and command pins.
-  // PF2 (CLK) has no pull-up.
+  // Pull-ups for CMD and DAT pins, not CLK.
   v = ReadGPIO(PF_PULL0);
 
   for (int i = 0; i < 6; i++) {
     v &= ~(3U << (i * 2));
+
     if (i != 2)
       v |= (1U << (i * 2));
   }
@@ -175,29 +117,56 @@ smhc_gpio_init(void)
   WriteGPIO(PF_PULL0, v);
 }
 
+static int
+smhc_reset_fifo(void)
+{
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_FIFO_RESET);
+
+  for (int i = 0; i < TIMEOUT_LOOPS; i++) {
+    if (!(ReadReg(SMHC_CTRL) & SMHC_FIFO_RESET))
+      return 0;
+  }
+
+  printk("SMHC FIFO reset timeout\n");
+  return -1;
+}
+
 int
 smhc_init(void)
 {
   uint32 resp;
   int ready = 0;
+  int i;
 
   initialized = 0;
-  initsleeplock(&mmclock, "mmc");
+  rca = 0;
 
+  printk("SMHC: configuring GPIO\n");
   smhc_gpio_init();
+
+  printk("SMHC: enabling bus clock\n");
   smhc0_bus_enable();
+
+  printk("SMHC: enabling module clock\n");
   smhc0_clock_enable();
 
-  // Reset controller/FIFO/DMA
+  printk("SMHC: CCU clock=%x\n", ReadCCU(SMHC0_CLK_REG));
+
+  // Reset controller, FIFO and DMA.
   WriteReg(SMHC_CTRL, 7);
 
-  int i;
-  for (i = 0; i < TIMEOUT_LOOPS; i++)
+  for (i = 0; i < TIMEOUT_LOOPS; i++) {
     if ((ReadReg(SMHC_CTRL) & 7) == 0)
       break;
+  }
 
-  if (i == TIMEOUT_LOOPS)
+  if (i == TIMEOUT_LOOPS) {
+    printk("SMHC controller reset timeout\n");
     return -1;
+  }
+
+  // Enable CPU access to FIFO (disable DMA mode).
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_AHB_ACCESS);
 
   WriteReg(SMHC_INTMASK, 0);
   WriteReg(SMHC_IDIE, 0);
@@ -205,38 +174,50 @@ smhc_init(void)
   WriteReg(SMHC_RINTSTS, 0xFFFFFFFF);
   WriteReg(SMHC_TMOUT, 0xFFFFFFFF);
 
-  // 1-bit mode, 512-byte sectors
+  // 1-bit SD mode.
   WriteReg(SMHC_CTYPE, 0);
   WriteReg(SMHC_BLKSIZ, 512);
 
-  // 24 MHz / (2 * 30) = 400 kHz
-  WriteReg(SMHC_CLKDIV, 30);
+  // Set internal clock divider to 2.
+  // CLKCR divider field = divider - 1.
+  WriteReg(SMHC_CLKDIV, 1);
 
   if (smhc_update_clock() < 0)
     return -1;
 
-  // Enable output clock (bit 16).
+  // Enable card output clock.
   WriteReg(SMHC_CLKDIV, ReadReg(SMHC_CLKDIV) | (1U << 16));
 
   if (smhc_update_clock() < 0)
     return -1;
 
-  // CMD0: reset card
+  printk("SMHC: clock configured\n");
+
+  // CMD0: reset card to idle.
+  printk("SMHC: CMD0\n");
+
   if (smhc_send_cmd(CMD_INIT | 0, 0, 0) < 0)
     return -1;
 
-  // CMD8: SD version 2+, 2.7-3.6 V
+  // CMD8: SD v2 voltage/interface check.
+  printk("SMHC: CMD8\n");
+
   if (smhc_send_cmd(CMD_RESP | CMD_CRC | 8, 0x1AA, &resp) < 0)
     return -1;
 
-  if ((resp & 0xFFF) != 0x1AA)
+  if ((resp & 0xFFF) != 0x1AA) {
+    printk("SMHC: CMD8 invalid response=%x\n", resp);
     return -1;
+  }
 
-  // ACMD41: initialize SDHC/SDXC card
+  // CMD55 + ACMD41: initialize SD card.
+  printk("SMHC: ACMD41\n");
+
   for (i = 0; i < 10000; i++) {
     if (smhc_send_cmd(CMD_RESP | CMD_CRC | 55, 0, 0) < 0)
       return -1;
 
+    // HCS=1, request 2.7-3.6 V operating range.
     if (smhc_send_cmd(CMD_RESP | 41, 0x40FF8000, &resp) < 0)
       return -1;
 
@@ -246,30 +227,55 @@ smhc_init(void)
     }
   }
 
-  if (!ready)
+  if (!ready) {
+    printk("SMHC: card initialization timeout\n");
     return -1;
+  }
 
-  // Require SDHC/SDXC block addressing
-  if (!(resp & (1U << 30)))
+  // Require SDHC/SDXC sector addressing.
+  if (!(resp & (1U << 30))) {
+    printk("SMHC: unsupported SDSC card\n");
     return -1;
+  }
 
-  // CMD2: read CID
+  printk("SMHC: card ready, OCR=%x\n", resp);
+
+  // CMD2: obtain CID (136-bit response).
+  printk("SMHC: CMD2\n");
+
   if (smhc_send_cmd(CMD_RESP | CMD_LONG | CMD_CRC | 2, 0, 0) < 0)
     return -1;
 
-  // CMD3: obtain RCA
+  // CMD3: request relative card address.
+  printk("SMHC: CMD3\n");
+
   if (smhc_send_cmd(CMD_RESP | CMD_CRC | 3, 0, &resp) < 0)
     return -1;
 
   rca = resp & 0xFFFF0000;
 
-  // CMD7: select card
+  printk("SMHC: RCA=%x\n", rca);
+
+  // CMD7: select the SD card.
+  printk("SMHC: CMD7\n");
+
   if (smhc_send_cmd(CMD_RESP | CMD_CRC | 7, rca, 0) < 0)
     return -1;
 
-  // Keep the slow clock for initial testing.
+  // Wait until card is no longer busy.
+  for (i = 0; i < TIMEOUT_LOOPS; i++) {
+    if (!(ReadReg(SMHC_STATUS) & CARD_BUSY))
+      break;
+  }
+
+  if (i == TIMEOUT_LOOPS) {
+    printk("SMHC: card busy timeout\n");
+    return -1;
+  }
+
   initialized = 1;
-  printf("smhc: SD card initialized, RCA=%x\n", rca);
+
+  printk("SMHC: SD card initialized successfully\n");
   return 0;
 }
 
@@ -277,57 +283,56 @@ int
 smhc_read(uint32 sector, void *buf)
 {
   uint32 *data = (uint32 *)buf;
+  int t;
 
   if (!initialized || ((uint64)buf & 3))
     return -1;
 
-  acquiresleep(&mmclock);
+  if (smhc_reset_fifo() < 0)
+    return -1;
 
-  // Reset FIFO
-  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | (1U << 1));
-
-  int t;
-  for (t = 0; t < TIMEOUT_LOOPS; t++)
-    if (!(ReadReg(SMHC_CTRL) & (1U << 1)))
-      break;
-
-  if (t == TIMEOUT_LOOPS)
-    goto fail;
+  // Ensure FIFO is accessible by the CPU.
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_AHB_ACCESS);
 
   WriteReg(SMHC_BLKSIZ, 512);
   WriteReg(SMHC_BYTCNT, 512);
 
-  // CMD17: read single block
-  // Clear status, issue command, stream FIFO data.
+  // CMD17: read a single 512-byte sector.
   WriteReg(SMHC_RINTSTS, 0xFFFFFFFF);
   WriteReg(SMHC_CMDARG, sector);
   WriteReg(SMHC_CMD, CMD_START | CMD_WAIT | CMD_DATA | CMD_CRC | CMD_RESP | 17);
 
+  // Receive 128 32-bit words from FIFO.
   for (int i = 0; i < 128; i++) {
     for (t = 0; t < TIMEOUT_LOOPS; t++) {
-      if (ReadReg(SMHC_RINTSTS) & SMHC_ERRORS)
+      if (ReadReg(SMHC_RINTSTS) & SMHC_ERRORS_MASK)
         goto fail;
 
       if (!(ReadReg(SMHC_STATUS) & FIFO_EMPTY))
         break;
     }
 
-    if (t == TIMEOUT_LOOPS)
+    if (t == TIMEOUT_LOOPS) {
+      printk("SMHC: read FIFO timeout at word %d\n", i);
       goto fail;
+    }
 
     data[i] = ReadReg(SMHC_FIFO);
   }
 
+  // Verify command completion.
+  if (smhc_wait(CMD_DONE) < 0)
+    goto fail;
+
+  // Verify data transfer completion.
   if (smhc_wait(DATA_OVER) < 0)
     goto fail;
 
-  releasesleep(&mmclock);
   return 0;
 
 fail:
-  printf("smhc_read failed: sector=%d status=%x\n", sector,
+  printk("SMHC read failed: sector=%u status=%x\n", sector,
          ReadReg(SMHC_RINTSTS));
-  releasesleep(&mmclock);
   return -1;
 }
 
@@ -335,63 +340,61 @@ int
 smhc_write(uint32 sector, const void *buf)
 {
   const uint32 *data = (const uint32 *)buf;
+  int t;
 
   if (!initialized || ((uint64)buf & 3))
     return -1;
 
-  acquiresleep(&mmclock);
+  if (smhc_reset_fifo() < 0)
+    return -1;
 
-  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | (1U << 1));
-
-  int t;
-  for (t = 0; t < TIMEOUT_LOOPS; t++)
-    if (!(ReadReg(SMHC_CTRL) & (1U << 1)))
-      break;
-
-  if (t == TIMEOUT_LOOPS)
-    goto fail;
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_AHB_ACCESS);
 
   WriteReg(SMHC_BLKSIZ, 512);
   WriteReg(SMHC_BYTCNT, 512);
 
-  // CMD24: write single block
+  // CMD24: write a single 512-byte sector.
   WriteReg(SMHC_RINTSTS, 0xFFFFFFFF);
   WriteReg(SMHC_CMDARG, sector);
   WriteReg(SMHC_CMD, CMD_START | CMD_WAIT | CMD_WRITE | CMD_DATA | CMD_CRC |
                        CMD_RESP | 24);
 
+  // Transmit 128 32-bit words through FIFO.
   for (int i = 0; i < 128; i++) {
     for (t = 0; t < TIMEOUT_LOOPS; t++) {
-      if (ReadReg(SMHC_RINTSTS) & SMHC_ERRORS)
+      if (ReadReg(SMHC_RINTSTS) & SMHC_ERRORS_MASK)
         goto fail;
 
       if (!(ReadReg(SMHC_STATUS) & FIFO_FULL))
         break;
     }
 
-    if (t == TIMEOUT_LOOPS)
+    if (t == TIMEOUT_LOOPS) {
+      printk("SMHC: write FIFO timeout at word %d\n", i);
       goto fail;
+    }
 
     WriteReg(SMHC_FIFO, data[i]);
   }
 
+  // Verify command completion.
+  if (smhc_wait(CMD_DONE) < 0)
+    goto fail;
+
+  // Verify data transfer completion.
   if (smhc_wait(DATA_OVER) < 0)
     goto fail;
 
-  // Wait until card completes internal programming
-  for (t = 0; t < TIMEOUT_LOOPS; t++)
+  // Wait for card programming to finish.
+  for (t = 0; t < TIMEOUT_LOOPS; t++) {
     if (!(ReadReg(SMHC_STATUS) & CARD_BUSY))
-      break;
+      return 0;
+  }
 
-  if (t == TIMEOUT_LOOPS)
-    goto fail;
-
-  releasesleep(&mmclock);
-  return 0;
+  printk("SMHC: card programming timeout\n");
 
 fail:
-  printf("smhc_write failed: sector=%d status=%x\n", sector,
+  printk("SMHC write failed: sector=%u status=%x\n", sector,
          ReadReg(SMHC_RINTSTS));
-  releasesleep(&mmclock);
   return -1;
 }

@@ -78,6 +78,11 @@ int             printk(char*, ...) __attribute__ ((format (printf, 1, 2)));
 void            panic(char*) __attribute__((noreturn));
 void            printkinit(void);
 
+// // printf.c
+// int printf(char *, ...) __attribute__((format(printf, 1, 2)));
+// void panic(char *) __attribute__((noreturn));
+// void printfinit(void);
+
 // proc.c
 int             cpuid(void);
 void            kexit(int);
@@ -182,5 +187,10 @@ void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
 
+
+// mmc.c
+int smhc_init(void);
+int smhc_read(uint32 sector, void *buf);
+int smhc_write(uint32 sector, const void *buf);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

@@ -26,6 +26,15 @@ kvmmake(void)
   kpgtbl = (pagetable_t)kalloc();
   memset(kpgtbl, 0, PGSIZE);
 
+  // GPIO registers
+  kvmmap(kpgtbl, D1_GPIO, D1_GPIO, PGSIZE, PTE_R | PTE_W);
+
+  // CCU registers
+  kvmmap(kpgtbl, D1_CCU, D1_CCU, PGSIZE, PTE_R | PTE_W);
+
+  //SMHC registers
+  kvmmap(kpgtbl, D1_SMHC, D1_SMHC, PGSIZE, PTE_R | PTE_W);
+
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
@@ -165,7 +174,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
       return -1;
     if (*pte & PTE_V)
       panic("mappages: remap");
-    *pte = PA2PTE(pa) | perm | PTE_V | PTE_A | PTE_D;
+    *pte = PA2PTE(pa) | perm | PTE_V;
     if (a == last)
       break;
     a += PGSIZE;

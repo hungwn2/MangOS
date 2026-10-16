@@ -46,3 +46,5 @@ entry("sync");
 entry("sem_init");
 entry("sem_wait");
 entry("sem_post");
+entry("mmcread");
+entry("mmcwrite");
