@@ -32,6 +32,8 @@ OBJS = \
   $K/virtio_disk.o \
   $K/sem.o \
   $K/syssem.o \
+  $K/mmc.o \
+  $K/sysmmc.o \
 # riscv64-unknown-elf- or riscv64-linux-gnu-
 # perhaps in /opt/riscv/bin
 #TOOLPREFIX = 
