@@ -1,5 +1,5 @@
 My implementation of a xv6 port for the MangoPi MQ-Pro allwinner-D1 board. 
-![MangoPi MQ1PH-1GB](MangoPi-MQ1PH-1GB.jpg)
+<img width="2384" height="2384" alt="image" src="https://github.com/user-attachments/assets/fed629eb-033e-49ef-93e2-c9067010072e" />
 
 This project ports MIT xv6 from its original QEMU virt environment to the MangoPi MQ Pro, a real RISC-V development board based on the Allwinner D1.
 The goal is to adapt xv6’s low-level platform code for real hardware, including memory mapping, UART, interrupts, timers, storage, and the boot process through U-Boot and OpenSBI.
