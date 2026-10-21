@@ -81,6 +81,7 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 // Per-process state
 struct proc {
   struct spinlock lock;
+  int is_thread; // 0 =proc, 1=thread
 
   // p->lock must be held when using these:
   enum procstate state; // Process state
@@ -102,3 +103,7 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
+
+int thread_create(void (*fcn)(void *), void *arg, void *stack);
+int thread_join(void);
+void thread_exit(void);

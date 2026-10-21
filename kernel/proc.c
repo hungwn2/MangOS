@@ -124,6 +124,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->is_thread = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
@@ -379,7 +380,7 @@ kwait(uint64 addr)
     // Scan through table looking for exited children.
     havekids = 0;
     for (pp = proc; pp < &proc[NPROC]; pp++) {
-      if (pp->parent == p) {
+      if (pp->parent == p && !pp->is_thread) {
         // make sure the child isn't still in exit() or swtch().
         acquire(&pp->lock);
 
@@ -698,4 +699,116 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+int
+thread_create(void (*fcn)(void *), void *arg, void *stack)
+{
+  int i, pid;
+  struct proc *p = myproc();
+  struct proc *np;
+
+  if (fcn == 0 || stack == 0)
+    return -1;
+  if ((np = allocproc()) == 0) {
+    return -1;
+  }
+
+  for (uint64 va = 0; va < p->sz; va += PGSIZE) {
+    pte_t *pte = walk(p->pagetable, va, 0);
+    if (pte == 0 || (*pte & PTE_V) == 0) {
+      continue;
+    }
+    uint64 pa = PTE2PA(*pte);
+    uint flags = PTE_FLAGS(*pte);
+    increase(pa);
+
+    if (mappages(np->pagetable, va, PGSIZE, pa, flags) < 0) {
+      kfree((void *)pa);
+      freeproc(np);
+      release(&np->lock);
+      return -1;
+    }
+  }
+  np->sz = p->sz;
+  *np->trapframe = *p->trapframe;
+  np->trapframe->epc = (uint64)fcn;
+  np->trapframe->a0 = (uint64)arg;
+  np->trapframe->sp = ((uint64)stack + PGSIZE) & ~15ULL;
+  np->trapframe->ra = 0xffffffff;
+
+  for (i = 0; i < NOFILE; i++)
+    if (p->ofile[i])
+      np->ofile[i] = filedup(p->ofile[i]);
+  np->cwd = idup(p->cwd);
+  safestrcpy(np->name, p->name, sizeof(np->name));
+  np->is_thread = 1;
+  pid = np->pid;
+
+  release(&np->lock);
+
+  acquire(&wait_lock);
+  np->parent = p;
+  release(&wait_lock);
+
+  acquire(&np->lock);
+  np->state = RUNNABLE;
+  release(&np->lock);
+
+  return pid;
+}
+
+int
+thread_join(void)
+{
+  struct proc *pp;
+  struct proc *p = myproc();
+  int havekids, pid;
+
+  acquire(&wait_lock);
+
+  for (;;) {
+    havekids = 0;
+
+    for (pp = proc; pp < &proc[NPROC]; pp++) {
+      if (pp->parent == p && pp->is_thread) {
+        acquire(&pp->lock);
+
+        havekids = 1;
+
+        if (pp->state == ZOMBIE) {
+          pid = pp->pid;
+
+          pp->parent = 0;
+          freeproc(pp);
+
+          release(&pp->lock);
+          release(&wait_lock);
+
+          return pid;
+        }
+
+        release(&pp->lock);
+      }
+    }
+
+    if (!havekids || killed(p)) {
+      release(&wait_lock);
+      return -1;
+    }
+
+    sleep_prepare(p);
+    release(&wait_lock);
+    sleep();
+    acquire(&wait_lock);
+  }
+}
+
+void
+thread_exit(void)
+{
+  if (!myproc()->is_thread)
+    panic("thread_exit");
+
+  kexit(0);
 }
