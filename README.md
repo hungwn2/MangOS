@@ -18,7 +18,7 @@ Checklist of things I am looking to add:
 * [x] Parse device tree
 * [x] Boot through U-Boot + OpenSBI
 * [x] Add SD / eMMC storage support
-* [ ] Pthreads-like API
+* [x] Pthreads-like API
 * [x] Counting semaphores
 * [ ] Boot xv6 from eMMC
 * [ ] Add USB DFU support
