@@ -66,7 +66,7 @@ Checklist of things I am looking to add:
 * [x] Fix memory map / DRAM layout
 * [x] Parse device tree
 * [x] Boot through U-Boot + OpenSBI
-* [ ] Add SD / eMMC storage support
+* [x] Add SD / eMMC storage support
 * [ ] Pthreads-like API
 * [x] Counting semaphores
 * [ ] Boot xv6 from eMMC
