@@ -49,11 +49,11 @@ riscv64-softmmu.  Once they are installed, and in your shell
 search path, you can run "make qemu".
 =======
 My implementation of a xv6 port for the MangoPi MQ-Pro allwinner-D1 board. 
-
+<img width="2384" height="2384" alt="image" src="https://github.com/user-attachments/assets/fed629eb-033e-49ef-93e2-c9067010072e" />
 
 This project ports MIT xv6 from its original QEMU virt environment to the MangoPi MQ Pro, a real RISC-V development board based on the Allwinner D1.
 The goal is to adapt xv6’s low-level platform code for real hardware, including memory mapping, UART, interrupts, timers, storage, and the boot process through U-Boot and OpenSBI.
-
+Various features from the labs and section exercises have been added, and as I learn more I am adding more things as well.
 Beyond this, I am looking to add more features such as eMMC storage, USB DFU firmware updates, device-tree support, GPIO/I2C/SPI peripherals, and a reproducible flashing workflow.
 
 Checklist of things I am looking to add:
@@ -67,7 +67,7 @@ Checklist of things I am looking to add:
 * [x] Parse device tree
 * [x] Boot through U-Boot + OpenSBI
 * [ ] Add SD / eMMC storage support
-* [x] Pthreads-like API
+* [ ] Pthreads-like API
 * [x] Counting semaphores
 * [ ] Boot xv6 from eMMC
 * [ ] Add USB DFU support
