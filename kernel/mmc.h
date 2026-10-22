@@ -16,8 +16,10 @@
 #define SMHC0_GATING 0
 
 /* GPIO registers */
-#define PF_CFG0  0x0B4
-#define PF_PULL0 0x0D0
+#define PF_CFG0  0x0F0
+#define PF_DAT   0x100
+#define PF_DRV0  0x104
+#define PF_PULL0 0x114
 
 /* SMHC registers */
 #define SMHC_CTRL    0x000
@@ -39,6 +41,9 @@
 #define SMHC_IDST 0x088
 #define SMHC_IDIE 0x08C
 #define SMHC_FIFO 0x200
+
+#define SMHC_NTSR    0x05C
+#define SMHC_SAMP_DL 0x144
 
 /* SMHC command flags */
 #define CMD_START (1U << 31)

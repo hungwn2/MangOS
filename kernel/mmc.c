@@ -43,12 +43,15 @@ smhc_send_cmd(uint32 cmd, uint32 arg, uint32 *resp)
   WriteReg(SMHC_CMD, CMD_START | cmd);
 
   if (smhc_wait(CMD_DONE) < 0) {
-    printk("SMHC CMD%d failed: status=%x\n", cmd & 0x3F, ReadReg(SMHC_RINTSTS));
+    printk("CMD%d failed: RINT=%x STATUS=%x CLKCR=%x\n", cmd & 0x3F,
+           ReadReg(SMHC_RINTSTS), ReadReg(SMHC_STATUS), ReadReg(SMHC_CLKDIV));
     return -1;
   }
 
   if (resp)
     *resp = ReadReg(SMHC_RESP0);
+
+  printk("CMD%d OK resp=%x\n", cmd & 0x3F, resp ? *resp : 0);
 
   return 0;
 }
@@ -72,7 +75,7 @@ smhc0_clock_enable(void)
   // SMHC module clock = 24 MHz / 15 / 2 = 800 kHz
   // Internal card divider = 2 -> approximately 400 kHz
 
-  WriteCCU(SMHC0_CLK_REG, (1U << 31) | 14U);
+  WriteCCU(SMHC0_CLK_REG, (1U << 31) | (1U << 8) | 14U);
 }
 
 static int
@@ -101,7 +104,7 @@ smhc_gpio_init(void)
     v &= ~(0xFU << (i * 4));
     v |= (2U << (i * 4));
   }
-
+  v &= ~(0xFU << 24);
   WriteGPIO(PF_CFG0, v);
 
   // Pull-ups for CMD and DAT pins, not CLK.
@@ -115,6 +118,11 @@ smhc_gpio_init(void)
   }
 
   WriteGPIO(PF_PULL0, v);
+  printk("PF_CFG0=%x\n", ReadGPIO(PF_CFG0));
+  printk("PF_PULL0=%x\n", ReadGPIO(PF_PULL0));
+  printk("PF_DAT=%x\n", ReadGPIO(PF_DAT));
+
+  printk("Card detected=%d\n", !!(ReadGPIO(PF_DAT) & (1U << 6)));
 }
 
 static int
@@ -164,6 +172,13 @@ smhc_init(void)
     printk("SMHC controller reset timeout\n");
     return -1;
   }
+  // Enable new timing mode (required for D1).
+  WriteReg(SMHC_NTSR, ReadReg(SMHC_NTSR) | (1U << 31));
+
+  // Enable software-controlled sampling delay.
+  WriteReg(SMHC_SAMP_DL, 1U << 7);
+
+  printk("SMHC NTSR=%x\n", ReadReg(SMHC_NTSR));
 
   // Enable CPU access to FIFO (disable DMA mode).
   WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_AHB_ACCESS);
