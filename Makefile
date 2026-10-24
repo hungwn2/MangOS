@@ -1,3 +1,15 @@
+PLATFORM ?= qemu
+
+ifeq ($(PLATFORM),qemu)
+  PLATFORM_FLAGS = -DPLATFORM_QEMU
+  KERNEL_LD = kernel/kernel-qemu.ld
+else ifeq ($(PLATFORM),mangopi)
+  PLATFORM_FLAGS = -DPLATFORM_MANGOPI
+  KERNEL_LD = kernel/kernel-mangopi.ld
+else
+  $(error Unknown platform: $(PLATFORM))
+endif
+
 K=kernel
 U=user
 
@@ -83,6 +95,7 @@ CFLAGS += -fno-builtin-memcpy -Wno-main
 CFLAGS += -fno-builtin-printf -fno-builtin-fprintf -fno-builtin-vprintf
 CFLAGS += -I.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+CFLAGS += $(PLATFORM_FLAGS)
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
 ifneq ($(shell $(CC) -dumpspecs 2>/dev/null | grep -e '[^f]no-pie'),)
@@ -94,14 +107,14 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $(OBJS) $K/kernel.ld
-	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
+$K/kernel: $(OBJS) $(KERNEL_LD)
+	$(LD) $(LDFLAGS) -T $(KERNEL_LD) -o $K/kernel $(OBJS)
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
 	$(OBJCOPY) -S -O binary $K/kernel $K/kernel.bin
 
 $K/%.o: $K/%.S
-	$(CC) -march=rv64gc -g $(DETFLAGS) -c -o $@ $<
+	$(CC) -march=rv64gc -g $(DETFLAGS) $(PLATFORM_FLAGS) -c -o $@ $<
 
 tags: $(OBJS)
 	etags kernel/*.S kernel/*.c
@@ -158,8 +171,9 @@ UPROGS=\
 	$U/_semtest\
 
 
-fs.img: mkfs/mkfs README.md $(UPROGS)
-	mkfs/mkfs fs.img README.md $(UPROGS)
+fs.img: mkfs/mkfs README $(UPROGS)
+	mkfs/mkfs fs.img README $(UPROGS)
+	
 
 -include kernel/*.d user/*.d
 

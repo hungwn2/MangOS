@@ -19,8 +19,9 @@ uint64 timer_scratch[NCPU][5];
 void
 start(void)
 {
+#ifdef PLATFORM_MANGOPI
   d1_uart_hw_init();
-
+#endif
   // mret should enter supervisor mode.
   unsigned long x = r_mstatus();
   x &= ~MSTATUS_MPP_MASK;
@@ -38,15 +39,14 @@ start(void)
   w_mideleg(0xffff);
 
   // allow supervisor software interrupts.
-  w_sie(r_sie() | SIE_SSIE);
-
+  w_sie(r_sie() | SIE_SEIE | SIE_SSIE);
   // give S-mode access to physical memory.
   w_pmpaddr0(0xffffffffULL);
   w_pmpcfg0(0x0f);
 
   timerinit();
 
-  w_tp(0);
+  w_tp(r_mhartid());
 
   asm volatile("mret");
 }
@@ -54,7 +54,7 @@ start(void)
 void
 timerinit(void)
 {
-  int id = 0;
+  int id = r_mhartid();
 
   // D1 timer frequency is much higher than we need.
   // Start with 1,000,000 ticks and adjust later.

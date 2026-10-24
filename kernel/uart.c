@@ -14,7 +14,11 @@
 // the UART control registers are memory-mapped
 // at address UART0. this macro returns the
 // address of one of the registers.
-#define Reg(reg)         ((volatile uint32 *)(UART0 + 4 * (reg)))
+#ifdef PLATFORM_MANGOPI
+#define Reg(reg) ((volatile uint32 *)(UART0 + 4 * (reg)))
+#elif defined(PLATFORM_QEMU)
+#define Reg(reg) ((volatile uint8 *)(UART0 + (reg)))
+#endif
 #define ReadReg(reg)     (*(Reg(reg)))
 #define WriteReg(reg, v) (*(Reg(reg)) = (v))
 
@@ -48,9 +52,31 @@ uartinit(void)
 {
   // Hardware configuration was already performed
   // in start() by d1_uart_hw_init().
+#ifdef PLATFORM_QEMU
 
-  // No UART interrupts yet.
+  // Disable interrupts.
   WriteReg(IER, 0x00);
+
+  // Enable baud-rate divisor configuration.
+  WriteReg(LCR, LCR_BAUD_LATCH);
+
+  // Configure baud rate.
+  WriteReg(0, 0x03);
+  WriteReg(1, 0x00);
+
+  // 8 data bits, no parity.
+  WriteReg(LCR, LCR_EIGHT_BITS);
+
+  // Enable and reset FIFOs.
+  WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+
+  // Enable receive and transmit interrupts.
+  WriteReg(IER, IER_RX_ENABLE | IER_TX_ENABLE);
+
+// No UART interrupts yet.
+#elif defined(PLATFORM_MANGOPI)
+  WriteReg(IER, 0x00);
+#endif
 
   initsleeplock(&tx_lock, "uart");
 }
