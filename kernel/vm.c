@@ -26,15 +26,11 @@ kvmmake(void)
   kpgtbl = (pagetable_t)kalloc();
   memset(kpgtbl, 0, PGSIZE);
 
-  // GPIO registers
+#ifdef PLATFORM_MANGOPI
   kvmmap(kpgtbl, D1_GPIO, D1_GPIO, PGSIZE, PTE_R | PTE_W);
-
-  // CCU registers
   kvmmap(kpgtbl, D1_CCU, D1_CCU, PGSIZE, PTE_R | PTE_W);
-
-  //SMHC registers
   kvmmap(kpgtbl, D1_SMHC, D1_SMHC, PGSIZE, PTE_R | PTE_W);
-
+#endif
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
