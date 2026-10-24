@@ -20,13 +20,13 @@ Checklist of things I am looking to add:
 * [x] Add SD / eMMC storage support
 * [x] Pthreads-like API
 * [x] Counting semaphores
-* [ ] Boot xv6 from eMMC
+* [x] Boot xv6 from eMMC
 * [ ] Add USB DFU support
 * [ ] Flash/update xv6 over DFU
 * [ ] Add GPIO / I2C / SPI support
 * [ ] Add hardware watchdog
-* [ ] Create `make flash` / `xfel` workflow
-* [ ] Run `usertests` on real hardware
+* [x] Create `make flash` / `xfel` workflow
+* [x] Run `usertests` on real hardware
 
 Before I started doing this, I had done the xv6 labs here:https://github.com/hungwn2/Systems-stuff/branches
 
