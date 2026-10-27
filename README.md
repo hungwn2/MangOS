@@ -25,6 +25,8 @@ Checklist of things I am looking to add:
 * [ ] Flash/update xv6 over DFU
 * [ ] Add GPIO / I2C / SPI support
 * [ ] Add hardware watchdog
+* [ ] HDMI Framebuffer (using D1 DMA)
+* [ ] Play doom?
 * [x] Create `make flash` / `xfel` workflow
 * [x] Run `usertests` on real hardware
 
