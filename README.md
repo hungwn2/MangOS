@@ -21,6 +21,9 @@ Checklist of things I am looking to add:
 * [x] Pthreads-like API
 * [x] Counting semaphores
 * [x] Boot xv6 from eMMC
+* [ ] UNIX-style signals
+* [ ] lseek syscall
+* [ ] symbolic links in filesystem
 * [ ] Add USB DFU support
 * [ ] Flash/update xv6 over DFU
 * [ ] Add GPIO / I2C / SPI support
