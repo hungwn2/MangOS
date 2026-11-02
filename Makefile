@@ -169,6 +169,7 @@ UPROGS=\
 	$U/_dorphan\
 	$U/_sync\
 	$U/_semtest\
+	$U/_cowtest\
 
 
 fs.img: mkfs/mkfs README $(UPROGS)

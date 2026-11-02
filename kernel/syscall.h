@@ -26,3 +26,4 @@
 #define SYS_sem_post 25
 #define SYS_mmcread  26
 #define SYS_mmcwrite 27
+#define SYS_COW      28
