@@ -27,16 +27,20 @@ kvmmake(void)
   memset(kpgtbl, 0, PGSIZE);
 
 #ifdef PLATFORM_MANGOPI
+  //D1 GPIO
   kvmmap(kpgtbl, D1_GPIO, D1_GPIO, PGSIZE, PTE_R | PTE_W);
+  //Clock Control
   kvmmap(kpgtbl, D1_CCU, D1_CCU, PGSIZE, PTE_R | PTE_W);
+  //SD/MMC
   kvmmap(kpgtbl, D1_SMHC, D1_SMHC, PGSIZE, PTE_R | PTE_W);
 #endif
   // uart registers
   kvmmap(kpgtbl, UART0, UART0, PGSIZE, PTE_R | PTE_W);
 
+#ifdef PLATFORM_QEMU
   // virtio mmio disk interface
   kvmmap(kpgtbl, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
-
+#endif
   // PLIC
   kvmmap(kpgtbl, PLIC, PLIC, 0x4000000, PTE_R | PTE_W);
 
