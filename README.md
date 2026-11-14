@@ -29,6 +29,11 @@ Checklist of things I am looking to add:
 * [ ] Add GPIO / I2C / SPI support
 * [ ] Add hardware watchdog
 * [ ] HDMI Framebuffer (using D1 DMA)
+* [ ] Rust Support?
+* [ ] doubly indirect block pointer inodes (max filesize 1MiB -> 512MiB)
+* [ ] users, groups, and permissions in filesystem
+* [ ] Shell in serial
+* [ ] PWD support
 * [ ] Play doom?
 * [x] Create `make flash` / `xfel` workflow
 * [x] Run `usertests` on real hardware
