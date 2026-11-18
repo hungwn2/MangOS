@@ -540,8 +540,7 @@ forkret(void)
   ((void (*)(uint64))trampoline_userret)(satp);
 }
 
-// Put the thread to sleep.  Assumes sleep_prepare() was called before.
-// If the channel registered by sleep_prepare() has been woken up in
+// Put the proc to sleep and sends it to scheduler proc till woken up when condition is true
 // the meantime, do not go to sleep, and instead return immediately.
 void
 sleep(void *chan, struct spinlock *lk)
