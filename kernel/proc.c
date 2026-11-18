@@ -411,10 +411,7 @@ kwait(uint64 addr)
     }
 
     // Wait for a child to exit.
-    sleep_prepare(p); //DOC: wait-sleep
-    release(&wait_lock);
-    sleep();
-    acquire(&wait_lock);
+    sleep(p, &wait_lock);
   }
 }
 
@@ -543,33 +540,21 @@ forkret(void)
   ((void (*)(uint64))trampoline_userret)(satp);
 }
 
-// Register current process as waiting for wakeups on chan.
-void
-sleep_prepare(void *chan)
-{
-  struct proc *p = myproc();
-
-  acquire(&p->lock);
-  if (chan == 0)
-    panic("sleep_prepare: zero chan");
-  p->chan = chan;
-  release(&p->lock);
-}
-
-// Put the thread to sleep.  Assumes sleep_prepare() was called before.
-// If the channel registered by sleep_prepare() has been woken up in
+// Put the proc to sleep and sends it to scheduler proc till woken up when condition is true
 // the meantime, do not go to sleep, and instead return immediately.
 void
-sleep(void)
+sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
 
   acquire(&p->lock);
-  if (p->chan != 0) {
-    p->state = SLEEPING;
-    sched();
-  }
+  release(lk);
+  p->chan = chan;
+  p->state = SLEEPING;
+  sched();
+  p->chan = 0;
   release(&p->lock);
+  acquire(lk);
 }
 
 // Wake up all processes sleeping on channel chan.
@@ -579,19 +564,13 @@ wakeup(void *chan)
   struct proc *p;
 
   for (p = proc; p < &proc[NPROC]; p++) {
-    acquire(&p->lock);
-    if (p->chan == chan) {
-      // If the process is waiting for wakeups on this channel,
-      // signal that the wakeup happened by clearing p->chan.
-      p->chan = 0;
-
-      // If this waiting process has gotten so far as to actually
-      // go to sleep, also set it back to RUNNING.
-      if (p->state == SLEEPING) {
+    if (p != myproc()) {
+      acquire(&p->lock);
+      if (p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
       }
+      release(&p->lock);
     }
-    release(&p->lock);
   }
 }
 

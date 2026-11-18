@@ -131,16 +131,10 @@ begin_op(void)
   acquire(&log.lock);
   while (1) {
     if (log.committing) {
-      sleep_prepare(&log);
-      release(&log.lock);
-      sleep();
-      acquire(&log.lock);
+      sleep(&log, &log.lock);
     } else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS > LOGBLOCKS) {
       // this op might exhaust log space; wait for commit.
-      sleep_prepare(&log);
-      release(&log.lock);
-      sleep();
-      acquire(&log.lock);
+      sleep(&log, &log.lock);
     } else {
       log.outstanding += 1;
       release(&log.lock);
@@ -250,10 +244,7 @@ sys_sync(void)
   if (log.committing || log.outstanding > 0) {
     int n = log.ncommit + 1;
     while (log.ncommit < n) {
-      sleep_prepare(&log);
-      release(&log.lock);
-      sleep();
-      acquire(&log.lock);
+      sleep(&log, &log.lock);
     }
   }
   release(&log.lock);
