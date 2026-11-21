@@ -26,6 +26,21 @@ extern char trampoline[]; // trampoline.S
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+void
+finish_switch(void)
+{
+  struct cpu *c = mycpu();
+  struct proc *prev = c->prev;
+  if (prev != 0) {
+    c->prev = 0;
+    // If prev was yielding (still marked RUNNING), make it RUNNABLE now
+    // that we are safely off its stack.
+    if (prev != &c->idle && prev->state == RUNNING) {
+      prev->state = RUNNABLE;
+    }
+    release(&prev->lock);
+  }
+}
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
@@ -428,44 +443,16 @@ kwait(uint64 addr)
 void
 scheduler(void)
 {
-  struct proc *p;
   struct cpu *c = mycpu();
-
-  c->proc = 0;
+  struct proc *idle = &c->idle;
+  initlock(&idle->lock, "idle");
+  idle->state = RUNNING;
+  c->proc = idle;
   for (;;) {
-    // The most recent process to run may have had interrupts
-    // turned off; enable them to avoid a deadlock if all
-    // processes are waiting. Then turn them back off
-    // to avoid a possible race between an interrupt
-    // and wfi.
     intr_on();
-    intr_off();
-
-    int found = 0;
-    for (p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if (p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
-
-        // Don't re-enable interrupts on release.
-        mycpu()->intena = 0;
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-        found = 1;
-      }
-      release(&p->lock);
-    }
-    if (found == 0) {
-      // nothing to run; stop running on this core until an interrupt.
-      asm volatile("wfi");
-    }
+    acquire(&idle->lock);
+    sched();
+    release(&idle->lock);
   }
 }
 
@@ -480,20 +467,54 @@ void
 sched(void)
 {
   int intena;
+  struct cpu *c = mycpu();
   struct proc *p = myproc();
+  struct proc *next = 0;
 
   if (!holding(&p->lock))
     panic("sched p->lock");
   if (mycpu()->noff != 1)
     panic("sched locks");
-  if (p->state == RUNNING)
-    panic("sched RUNNING");
   if (intr_get())
     panic("sched interruptible");
 
-  intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
-  mycpu()->intena = intena;
+  for (struct proc *cand = proc; cand < &proc[NPROC]; cand++) {
+    if (cand == p)
+      continue;
+    if (p < cand) {
+      acquire(&cand->lock);
+    } else {
+      release(&p->lock);
+      acquire(&cand->lock);
+      acquire(&p->lock);
+    }
+    if (cand->state == RUNNABLE) {
+      next = cand;
+      break;
+    }
+    release(&cand->lock);
+  }
+  if (next == 0) {
+    if (p == &c->idle) {
+      return;
+    }
+    next = &c->idle;
+    if (p < next) {
+      acquire(&next->lock);
+    } else {
+      release(&p->lock);
+      acquire(&next->lock);
+      acquire(&p->lock);
+    }
+  }
+  next->state = RUNNING;
+  c->proc = next;
+  c->prev = p;
+
+  intena = c->intena;
+  swtch(&p->context, &next->context);
+  c->intena = intena;
+  finish_switch();
 }
 
 // Give up the CPU for one scheduling round.
@@ -502,7 +523,6 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
-  p->state = RUNNABLE;
   sched();
   release(&p->lock);
 }
@@ -514,6 +534,7 @@ forkret(void)
 {
   extern char userret[];
   static int first = 1;
+  finish_switch();
   struct proc *p = myproc();
 
   // Still holding p->lock from scheduler.
