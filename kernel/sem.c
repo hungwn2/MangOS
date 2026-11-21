@@ -23,10 +23,7 @@ sem_wait(struct semaphore *s)
   acquire(&s->lock);
 
   while (s->count == 0) {
-    sleep_prepare(s);
-    release(&s->lock);
-    sleep();
-    acquire(&s->lock);
+    sleep(s, &s->lock);
   }
   s->count--;
   release(&s->lock);

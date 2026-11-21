@@ -101,10 +101,8 @@ consoleread(int user_dst, uint64 dst, int n)
         release(&cons.lock);
         return -1;
       }
-      sleep_prepare(&cons.r);
-      release(&cons.lock);
-      sleep();
-      acquire(&cons.lock);
+
+      sleep(&cons.r, &cons.lock);
     }
 
     c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
