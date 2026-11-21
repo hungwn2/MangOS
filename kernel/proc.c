@@ -484,9 +484,11 @@ sched(void)
     if (p < cand) {
       acquire(&cand->lock);
     } else {
+      push_off();
       release(&p->lock);
       acquire(&cand->lock);
       acquire(&p->lock);
+      pop_off();
     }
     if (cand->state == RUNNABLE) {
       next = cand;
