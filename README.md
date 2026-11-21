@@ -19,6 +19,7 @@ Checklist of things I am looking to add:
 * [x] Boot through U-Boot + OpenSBI
 * [x] Add SD / eMMC storage support
 * [x] Pthreads-like API
+* [x] Condition Variables 
 * [x] Counting semaphores
 * [x] Boot xv6 from eMMC
 * [ ] UNIX-style signals + handlers
