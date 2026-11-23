@@ -22,6 +22,7 @@ Checklist of things I am looking to add:
 * [x] Condition Variables 
 * [x] Counting semaphores
 * [x] Boot xv6 from eMMC
+* [ ] pwd.h and /etc/passwd
 * [ ] UNIX-style signals + handlers
 * [ ] lseek syscall
 * [ ] symbolic links in filesystem
@@ -40,4 +41,5 @@ Checklist of things I am looking to add:
 * [x] Run `usertests` on real hardware
 
 Before I started doing this, I had done the xv6 labs here:https://github.com/hungwn2/Systems-stuff/branches
+
 
