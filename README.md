@@ -3,9 +3,12 @@ My implementation of a xv6 port for the MangoPi MQ-Pro allwinner-D1 board.
 <img width="2384" height="2384" alt="image" src="https://github.com/user-attachments/assets/fed629eb-033e-49ef-93e2-c9067010072e" />
 
 This project ports MIT xv6 from its original QEMU virt environment to the MangoPi MQ Pro, a real RISC-V development board based on the Allwinner D1.
+https://pdos.csail.mit.edu/6.828/2026/xv6.html
+
 The goal is to adapt xv6’s low-level platform code for real hardware, including memory mapping, UART, interrupts, timers, storage, and the boot process through U-Boot and OpenSBI.
-Various features from the labs and section exercises have been added, and as I learn more I am adding more things as well.
-Beyond this, I am looking to add more features such as eMMC storage, USB DFU firmware updates, device-tree support, GPIO/I2C/SPI peripherals, and a reproducible flashing workflow.
+Various features from the labs and section exercises have been added, and as I learn more I am adding more things as well. Hopefully, the end result can is a system that I can use for everday tasks.
+
+
 
 Checklist of things I am looking to add:
 ## xv6 MangoPi Port
@@ -22,14 +25,15 @@ Checklist of things I am looking to add:
 * [x] Condition Variables 
 * [x] Counting semaphores
 * [x] Boot xv6 from eMMC
+* [ ] pwd.h and /etc/passwd
+* [ ] HDMI Framebuffer (using D1 DMA)
 * [ ] UNIX-style signals + handlers
+* [ ] Add USB DFU support
 * [ ] lseek syscall
 * [ ] symbolic links in filesystem
-* [ ] Add USB DFU support
 * [ ] Flash/update xv6 over DFU
 * [ ] Add GPIO / I2C / SPI support
 * [ ] Add hardware watchdog
-* [ ] HDMI Framebuffer (using D1 DMA)
 * [ ] Rust Support?
 * [ ] doubly indirect block pointer inodes (max filesize 1MiB -> 512MiB)
 * [ ] users, groups, and permissions in filesystem
@@ -40,4 +44,5 @@ Checklist of things I am looking to add:
 * [x] Run `usertests` on real hardware
 
 Before I started doing this, I had done the xv6 labs here:https://github.com/hungwn2/Systems-stuff/branches
+
 
