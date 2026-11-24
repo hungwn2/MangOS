@@ -15,6 +15,8 @@ Checklist of things I am looking to add:
 
 * [x] Build xv6 for RISC-V
 * [x] Boot xv6 on MangoPi D1
+* [x] Create `make flash` / `xfel` workflow
+* [x] Run `usertests` on real hardware
 * [x] Get UART output/input working
 * [x] Configure timer + external interrupts
 * [x] Fix memory map / DRAM layout
@@ -25,11 +27,18 @@ Checklist of things I am looking to add:
 * [x] Condition Variables 
 * [x] Counting semaphores
 * [x] Boot xv6 from eMMC
+* [ ] file I/o (FILE *, fopen, etc)
+* [ ] formatting (snprintf, scanf, etc)
+* [ ] errno handling
+* [ ] string handling (strncasecmp, strdup, etc)
+* [ ] Keyboard Input
+* [ ] Larger stack (16-32 pages)
 * [ ] pwd.h and /etc/passwd
 * [ ] HDMI Framebuffer (using D1 DMA)
 * [ ] UNIX-style signals + handlers
 * [ ] Add USB DFU support
 * [ ] lseek syscall
+* [ ] floating point registers
 * [ ] symbolic links in filesystem
 * [ ] Flash/update xv6 over DFU
 * [ ] Add GPIO / I2C / SPI support
@@ -38,10 +47,8 @@ Checklist of things I am looking to add:
 * [ ] doubly indirect block pointer inodes (max filesize 1MiB -> 512MiB)
 * [ ] users, groups, and permissions in filesystem
 * [ ] Shell in serial
-* [ ] PWD support
 * [ ] Play doom?
-* [x] Create `make flash` / `xfel` workflow
-* [x] Run `usertests` on real hardware
+
 
 Before I started doing this, I had done the xv6 labs here:https://github.com/hungwn2/Systems-stuff/branches
 
