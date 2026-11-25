@@ -191,5 +191,7 @@ void            virtio_disk_intr(void);
 int smhc_init(void);
 int smhc_read(uint32 sector, void *buf);
 int smhc_write(uint32 sector, const void *buf);
+void mmc_disk_init(void);
+void mmc_disk_rw(struct buf *, int);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x) / sizeof((x)[0]))

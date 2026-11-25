@@ -196,8 +196,10 @@ devintr()
 
     if (irq == UART0_IRQ) {
       uartintr();
+#ifndef PLATFORM_MANGOPI
     } else if (irq == VIRTIO0_IRQ) {
       virtio_disk_intr();
+#endif
     } else if (irq) {
       printk("unexpected interrupt irq=%d\n", irq);
     }

@@ -3,9 +3,12 @@
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "buf.h"
 #include "defs.h"
 #include "mmc.h"
-
 #define TIMEOUT_LOOPS 10000000
 
 // Additional controller bits.
@@ -13,8 +16,13 @@
 #define SMHC_FIFO_RESET  (1U << 1)
 #define SMHC_ERRORS_MASK 0xBBC2U
 
+#ifndef MMC_FS_SECTOR
+#define MMC_FS_SECTOR 2048
+#endif
+
 static uint32 rca;
 static int initialized;
+static struct sleeplock mmc_lock;
 
 static int
 smhc_wait(uint32 mask)
@@ -412,4 +420,53 @@ fail:
   printk("SMHC write failed: sector=%u status=%x\n", sector,
          ReadReg(SMHC_RINTSTS));
   return -1;
+}
+
+void
+mmc_disk_init(void)
+{
+  initsleeplock(&mmc_lock, "mmc");
+  if (smhc_init() < 0)
+    panic("mmc_disk_init");
+  printk("mmc: xv6 fs at sector %d\n", MMC_FS_SECTOR);
+}
+
+void
+mmc_disk_rw(struct buf *b, int write)
+{
+  uint32 sector = MMC_FS_SECTOR + b->blockno * (BSIZE / 512);
+  acquiresleep(&mmc_lock);
+
+  for (int i = 0; i < BSIZE / 512; i++) {
+    void *p = b->data + i * 512;
+    int r;
+    push_off();
+    if (write) {
+      r = smhc_write(sector + i, p);
+    } else {
+      r = smhc_read(sector + i, p);
+    }
+    pop_off();
+    if (r < 0) {
+      panic("mmc_disk_rw");
+    }
+  }
+  releasesleep(&mmc_lock);
+  // DEBUG: is the read path sane, and where is the superblock?
+  static uint32 probe[128];
+
+  // Sector 0 should hold an MBR: last word = 0xAA55xxxx
+  if (smhc_read(0, probe) < 0)
+    printk("mmc: sector 0 read failed\n");
+  else
+    printk("mmc: sector 0 word0=%x word127=%x\n", probe[0], probe[127]);
+
+  // Common places fs.img ends up (superblock = image offset + 2)
+  uint32 where[] = {2, 2050, 4098, 8194, 10242, 32770, 34818};
+  for (int i = 0; i < NELEM(where); i++) {
+    if (smhc_read(where[i], probe) < 0)
+      printk("mmc: sector %d read failed\n", where[i]);
+    else
+      printk("mmc: sector %d word0=%x\n", where[i], probe[0]);
+  }
 }

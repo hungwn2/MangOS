@@ -21,14 +21,12 @@ static volatile int started = 0;
 
 void d1_uart_puts(const char *);
 
-static void
-mark(const char *s)
-{
-  d1_uart_puts(s);
-  d1_uart_puts("\r\n");
-}
-
-static uint32 sector_data[128];
+// static void
+// mark(const char *s)
+// {
+//   d1_uart_puts(s);
+//   d1_uart_puts("\r\n");
+// }
 
 #endif
 
@@ -77,71 +75,25 @@ main(void)
   scheduler();
 
 #elif defined(PLATFORM_MANGOPI)
-
-  mark("main entered");
-
-  mark("kinit...");
-  kinit();
-
-  mark("kvminit...");
-  kvminit();
-
-  mark("kvminithart...");
-  kvminithart();
-
-  mark("paging enabled");
-
-  mark("procinit...");
-  procinit();
-
-  mark("printk init...");
+  consoleinit();
   printkinit();
-  printk("printk initialized\n");
+  printk("\nxv6 kernel is booting on MangoPi D1\n\n");
 
-  mark("trapinit...");
+  kinit();
+  kvminit();
+  kvminithart();
+  printk("paging enabled\n");
+
+  procinit();
   trapinit();
-
-  mark("trapinithart...");
   trapinithart();
-
-  mark("basic kernel initialization OK");
-
-  mark("smhc_init...");
-
-  if (smhc_init() < 0) {
-    mark("SMHC initialization FAILED");
-  } else {
-    mark("SMHC initialization OK");
-
-    mark("Reading sector 0...");
-
-    if (smhc_read(0, sector_data) < 0) {
-      mark("MMC read FAILED");
-    } else {
-      mark("MMC read OK");
-
-      for (int i = 0; i < 16; i++)
-        printk("%x ", sector_data[i]);
-
-      printk("\n");
-    }
-  }
-
-  intr_on();
-
-  mark("interrupts enabled");
-
-  uint last = ticks;
-
-  for (;;) {
-    if (ticks != last) {
-      last = ticks;
-
-      if ((ticks % 10) == 0)
-        mark("10 ticks passed");
-    }
-
-    asm volatile("wfi");
-  }
+  plicinithart();
+  mmc_disk_init();
+  binit();
+  iinit();
+  fileinit();
+  userinit();
+  printk("starting scheduler\n");
+  scheduler();
 #endif
 }

@@ -4,7 +4,9 @@ ifeq ($(PLATFORM),qemu)
   PLATFORM_FLAGS = -DPLATFORM_QEMU
   KERNEL_LD = kernel/kernel-qemu.ld
 else ifeq ($(PLATFORM),mangopi)
-  PLATFORM_FLAGS = -DPLATFORM_MANGOPI
+  # SD sector where fs.img starts (2048 = 1 MiB, clear of boot0/U-Boot)
+  FS_SECTOR ?= 2048
+  PLATFORM_FLAGS = -DPLATFORM_MANGOPI -DMMC_FS_SECTOR=$(FS_SECTOR)
   KERNEL_LD = kernel/kernel-mangopi.ld
 else
   $(error Unknown platform: $(PLATFORM))
@@ -221,6 +223,12 @@ check-qemu-version:
 		exit 1; \
 	fi
 
-.PHONY: fmt
+# Write fs.img to the MangoPi's SD card at FS_SECTOR.
+#   make PLATFORM=mangopi sdcard DEV=/dev/sdX
+sdcard: fs.img
+	@test -n "$(DEV)" || (echo "usage: make PLATFORM=mangopi sdcard DEV=/dev/sdX"; exit 1)
+	sudo dd if=fs.img of=$(DEV) bs=512 seek=$(FS_SECTOR) conv=fsync
+
+.PHONY: fmt sdcard
 fmt:
 	clang-format -i $(wildcard kernel/*.[ch] user/*.[ch] mkfs/*.c)
