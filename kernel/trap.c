@@ -215,7 +215,6 @@ devintr()
     // timer interrupt.
     clockintr();
     w_sip(r_sip() & ~2);
-
     return 2;
   } else {
     return 0;
