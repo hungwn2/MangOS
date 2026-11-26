@@ -3,18 +3,28 @@
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "buf.h"
 #include "defs.h"
 #include "mmc.h"
-
 #define TIMEOUT_LOOPS 10000000
+#define FSM_BUSY      (1U << 10)             // STATUS: data state machine busy
+#define FIFO_LEVEL(s) (((s) >> 17) & 0x1FFF) // STATUS: words in FIFO
 
 // Additional controller bits.
 #define SMHC_AHB_ACCESS  (1U << 31)
 #define SMHC_FIFO_RESET  (1U << 1)
 #define SMHC_ERRORS_MASK 0xBBC2U
 
+#ifndef MMC_FS_SECTOR
+#define MMC_FS_SECTOR 2048
+#endif
+
 static uint32 rca;
 static int initialized;
+static struct sleeplock mmc_lock;
 
 static int
 smhc_wait(uint32 mask)
@@ -137,6 +147,24 @@ smhc_reset_fifo(void)
 
   printk("SMHC FIFO reset timeout\n");
   return -1;
+}
+
+// After a stuck/failed transfer: reset the controller state machine and
+// FIFO, then re-latch the clock settings.
+static void
+smhc_recover(void)
+{
+  for (volatile int d = 0; d < 2000000; d++) // let the card finish programming
+    ;
+
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | 7); // soft reset + FIFO + DMA
+  for (int i = 0; i < TIMEOUT_LOOPS; i++)
+    if ((ReadReg(SMHC_CTRL) & 7) == 0)
+      break;
+
+  WriteReg(SMHC_CTRL, ReadReg(SMHC_CTRL) | SMHC_AHB_ACCESS);
+  WriteReg(SMHC_RINTSTS, 0xFFFFFFFF);
+  smhc_update_clock();
 }
 
 int
@@ -351,6 +379,22 @@ fail:
   return -1;
 }
 
+// DEBUG: ask the card what state it is in (CMD13 SEND_STATUS).
+// static void
+// smhc_card_state(const char *when)
+// {
+//   static const char *names[] = {"idle", "ready", "ident", "stby", "tran",
+//                                 "data", "rcv",   "prg",   "dis"};
+//   uint32 r = 0;
+
+//   if (smhc_send_cmd(CMD_RESP | CMD_CRC | 13, rca, &r) < 0) {
+//     printk("SMHC: CMD13 %s: no response\n", when);
+//     return;
+//   }
+//   uint32 st = (r >> 9) & 0xF;
+//   printk("SMHC: CMD13 %s: R1=%x state=%s\n", when, r, st < 9 ? names[st] : "?");
+// }
+
 int
 smhc_write(uint32 sector, const void *buf)
 {
@@ -374,13 +418,19 @@ smhc_write(uint32 sector, const void *buf)
   WriteReg(SMHC_CMD, CMD_START | CMD_WAIT | CMD_WRITE | CMD_DATA | CMD_CRC |
                        CMD_RESP | 24);
 
-  // Transmit 128 32-bit words through FIFO.
+  // Wait for the card's response BEFORE touching the FIFO: words written
+  // while the command is still on the wire get dropped on the D1.
+  if (smhc_wait(CMD_DONE) < 0)
+    goto fail;
+
+  // Feed the FIFO, never letting it hold more than 16 words.
   for (int i = 0; i < 128; i++) {
     for (t = 0; t < TIMEOUT_LOOPS; t++) {
       if (ReadReg(SMHC_RINTSTS) & SMHC_ERRORS_MASK)
         goto fail;
 
-      if (!(ReadReg(SMHC_STATUS) & FIFO_FULL))
+      uint32 s = ReadReg(SMHC_STATUS);
+      if (!(s & FIFO_FULL) && FIFO_LEVEL(s) < 16)
         break;
     }
 
@@ -392,24 +442,83 @@ smhc_write(uint32 sector, const void *buf)
     WriteReg(SMHC_FIFO, data[i]);
   }
 
-  // Verify command completion.
-  if (smhc_wait(CMD_DONE) < 0)
+  // Wait for data transfer completion (CRC status from the card).
+  for (t = 0; t < TIMEOUT_LOOPS * 10; t++) {
+    uint32 st = ReadReg(SMHC_RINTSTS);
+    if (st & SMHC_ERRORS_MASK) {
+      printk("SMHC write error: RINT=%x\n", st);
+      goto fail;
+    }
+    if (st & DATA_OVER)
+      break;
+  }
+  if (t == TIMEOUT_LOOPS * 10) {
+    printk("SMHC: write DATA_OVER timeout STATUS=%x\n", ReadReg(SMHC_STATUS));
     goto fail;
+  }
 
-  // Verify data transfer completion.
-  if (smhc_wait(DATA_OVER) < 0)
-    goto fail;
-
-  // Wait for card programming to finish.
-  for (t = 0; t < TIMEOUT_LOOPS; t++) {
+  // Wait for card programming to finish (card holds DAT0 low).
+  for (t = 0; t < TIMEOUT_LOOPS * 10; t++) {
     if (!(ReadReg(SMHC_STATUS) & CARD_BUSY))
       return 0;
   }
 
-  printk("SMHC: card programming timeout\n");
+  printk("SMHC: card programming timeout STATUS=%x\n", ReadReg(SMHC_STATUS));
 
 fail:
   printk("SMHC write failed: sector=%u status=%x\n", sector,
          ReadReg(SMHC_RINTSTS));
+  smhc_recover();
   return -1;
+}
+void
+mmc_disk_init(void)
+{
+  initsleeplock(&mmc_lock, "mmc");
+
+#ifdef MANGOPI_RAMDISK
+  printk("ramdisk: xv6 fs at 0x%lx\n", RAMDISK);
+  return;
+#endif
+
+  if (smhc_init() < 0)
+    panic("mmc_disk_init: SD card init failed");
+
+  printk("mmc: xv6 fs at sector %d\n", MMC_FS_SECTOR);
+}
+
+void
+mmc_disk_rw(struct buf *b, int write)
+{
+  uint32 sector = MMC_FS_SECTOR + b->blockno * (BSIZE / 512);
+  acquiresleep(&mmc_lock);
+
+  for (int i = 0; i < BSIZE / 512; i++) {
+    void *p = b->data + i * 512;
+    int r;
+    push_off();
+    if (write) {
+      r = smhc_write(sector + i, p);
+    } else {
+      r = smhc_read(sector + i, p);
+    }
+    pop_off();
+    if (r < 0) {
+      panic("mmc_disk_rw");
+    }
+  }
+  releasesleep(&mmc_lock);
+  // DEBUG: is the read path sane, and where is the superblock?
+  static uint32 probe[128];
+
+  // Sector 0 should hold an MBR: last word = 0xAA55xxxx
+  if (smhc_read(0, probe) < 0)
+    printk("mmc: sector 0 read failed\n");
+
+  // Common places fs.img ends up (superblock = image offset + 2)
+  uint32 where[] = {2, 2050, 4098, 8194, 10242, 32770, 34818};
+  for (int i = 0; i < NELEM(where); i++) {
+    if (smhc_read(where[i], probe) < 0)
+      printk("mmc: sector %d read failed\n", where[i]);
+  }
 }

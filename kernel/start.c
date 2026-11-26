@@ -21,6 +21,9 @@ start(void)
 {
 #ifdef PLATFORM_MANGOPI
   d1_uart_hw_init();
+  // PLIC registers are M-mode till this register is set, needed so
+  // plicinit()/plic_claim() don't fault
+  *(volatile uint32 *)(PLIC + 0x1FFFFC) = 1;
 #endif
   // mret should enter supervisor mode.
   unsigned long x = r_mstatus();

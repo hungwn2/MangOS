@@ -13,7 +13,9 @@ plicinit(void)
 {
   // set desired IRQ priorities non-zero (otherwise disabled).
   *(uint32 *)(PLIC + UART0_IRQ * 4) = 1;
+#ifndef PLATFORM_MANGOPI
   *(uint32 *)(PLIC + VIRTIO0_IRQ * 4) = 1;
+#endif
 }
 
 void
@@ -21,14 +23,17 @@ plicinithart(void)
 {
   int hart = cpuid();
 
-  // set enable bits for this hart's S-mode
-  // for the uart and virtio disk.
+#ifdef PLATFORM_MANGOPI
+  // UART0 priority must be non-zero or the PLIC never forwards it.
+  *(volatile uint32 *)(PLIC + UART0_IRQ * 4) = 1;
+  *(volatile uint32 *)PLIC_SENABLE(hart) = (1 << UART0_IRQ);
+#else
   *(uint32 *)PLIC_SENABLE(hart) = (1 << UART0_IRQ) | (1 << VIRTIO0_IRQ);
+#endif
 
   // set this hart's S-mode priority threshold to 0.
   *(uint32 *)PLIC_SPRIORITY(hart) = 0;
 }
-
 // ask the PLIC what interrupt we should serve.
 int
 plic_claim(void)

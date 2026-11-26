@@ -196,8 +196,10 @@ devintr()
 
     if (irq == UART0_IRQ) {
       uartintr();
+#ifndef PLATFORM_MANGOPI
     } else if (irq == VIRTIO0_IRQ) {
       virtio_disk_intr();
+#endif
     } else if (irq) {
       printk("unexpected interrupt irq=%d\n", irq);
     }
@@ -213,7 +215,6 @@ devintr()
     // timer interrupt.
     clockintr();
     w_sip(r_sip() & ~2);
-
     return 2;
   } else {
     return 0;

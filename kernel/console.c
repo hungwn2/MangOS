@@ -40,6 +40,10 @@ consputc(int c)
     uartputc_sync(' ');
     uartputc_sync('\b');
   } else {
+#ifdef PLATFORM_MANGOPI
+    if (c == '\n')
+      uartputc_sync('\r');
+#endif
     uartputc_sync(c);
   }
 }

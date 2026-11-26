@@ -40,7 +40,8 @@
 #define LSR             5        // line status register
 #define LSR_RX_READY    (1 << 0) // input is waiting to be read from RHR
 #define LSR_TX_IDLE     (1 << 5) // THR can accept another character to send
-
+#define USR             31
+#define ISR_BUSY        0x7
 // for sending threads to serialize their writes
 static struct sleeplock tx_lock;
 static int tx_chan; // &tx_chan is the "wait channel"
@@ -75,7 +76,8 @@ uartinit(void)
 
 // No UART interrupts yet.
 #elif defined(PLATFORM_MANGOPI)
-  WriteReg(IER, 0x00);
+  WriteReg(FCR, FCR_FIFO_ENABLE | FCR_FIFO_CLEAR);
+  WriteReg(IER, IER_RX_ENABLE);
 #endif
 
   initsleeplock(&tx_lock, "uart");
@@ -90,6 +92,14 @@ uartwrite(char buf[], int n)
   acquiresleep(&tx_lock);
 
   for (int i = 0; i < n; i++) {
+#ifdef PLATFORM_MANGOPI
+    // real serial terminals need CR before LF
+    if (buf[i] == '\n') {
+      while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
+        ;
+      WriteReg(THR, '\r');
+    }
+#endif
     while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
       ;
 
@@ -135,7 +145,13 @@ uartgetc(void)
 void
 uartintr(void)
 {
-  ReadReg(ISR); // acknowledge the interrupt
+  int isr = ReadReg(ISR); // acknowledge the interrupt
+#ifdef PLATFORM_MANGOPI
+  if ((isr & 0xF) == ISR_BUSY)
+    ReadReg(USR); // clear DW busy-detect, else it re-fires forever
+#else
+  (void)isr;
+#endif
 
   if (ReadReg(LSR) & LSR_TX_IDLE) {
     // UART finished transmitting; wake up sending thread.
